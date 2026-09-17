@@ -1,0 +1,7 @@
+{
+  "timezoneMode": "auto",
+  "timezone": null,
+  "restartChatGPT": true,
+  "checkProxy": true,
+  "notes": "timezoneMode=auto 时按当前出口 IP 的 IANA 时区注入 TZ；也可改成 manual 并填写 timezone，例如 America/Los_Angeles。"
+}
