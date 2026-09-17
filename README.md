@@ -1,4 +1,4 @@
-# Codex 网络与时区环境适配
+# Codex环境适配启动器
 
 把 **ChatGPT / Codex 桌面端** 的运行环境，对齐到当前代理节点：
 
@@ -6,9 +6,22 @@
 2. 进程时区使用该节点的 IANA 时区（例如 `America/Los_Angeles`）
 3. **不修改** Windows 系统时区
 
-社区有一种观察：本地系统时区（如 `China Standard Time`）和出口 IP 所在地区不一致时，ChatGPT / Codex 桌面端可能出现质量异常。浏览器可以用插件改时区；桌面端不行，所以本项目只在启动 `ChatGPT.exe` 时注入 `TZ`。
+## 社区共识（不是官方说明）
 
-这不是 OpenAI 官方机制说明，当作环境对齐工具使用即可。
+社区里把「回复质量突然变差、看起来像被换成低档模型」叫做 **降智**。下面几条是常见共识，**不是 OpenAI 官方机制**，也不能保证每个账号都一样。
+
+| 诱因 | 社区观察 | 建议 |
+|------|----------|------|
+| 时区与出口 IP 不一致 | 系统还是中国时区，流量却从美国节点出去，桌面端容易隐性降智 | 用本启动器给 ChatGPT 注入节点时区，例如 `America/Los_Angeles` |
+| **多 IP** | 同一账号短时间换国家/城市出口，或网页、APP、手机各走不同 IP | 固定 **一个** 出口地区；不要今天加州、明天东京、后天新加坡来回切 |
+| **多设备同时登录** | 电脑桌面端、浏览器、手机 App 同时在线，也常被反馈会降智 | 同一时间尽量只在 **一台主力设备、一个客户端** 使用 |
+
+本启动器只处理第一项（时区对齐出口）。多 IP 和多设备要靠使用习惯约束：
+
+- 一个账号对应一个稳定出口
+- 一个出口对应一个 IANA 时区
+- 一台电脑作为主力，不要多端同时挂着
+- 换节点后先刷新探测，再重新启动 ChatGPT
 
 ## 它做什么
 
@@ -23,31 +36,49 @@
 
 ## 快速开始
 
-在 PowerShell 中：
+日常双击 **Codex环境适配启动器**：
+
+`D:\myprojects\codex-env-adapter\dist\CodexEnvAdapter.exe`
+
+不需要安装 .NET。第一次打开后点 **创建桌面快捷方式**。
+
+1. 先打开 Clash / 系统代理，并固定到同一个节点
+2. 点 **刷新探测**，确认出口城市和时区
+3. 点 **保存并启动 ChatGPT**
+4. 不要从开始菜单再开一次 ChatGPT，也不要同时开网页版 / 手机 App
+
+## 界面示例
+
+主窗口（出口 IP 已隐去，仅作参考）：
+
+![Codex环境适配启动器主界面](docs/images/launcher-main.png)
+
+时区注入与启动按钮：
+
+![注入时区并启动](docs/images/launcher-timezone.png)
+
+重新编译：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\myprojects\codex-env-adapter\build.ps1
+```
+
+PowerShell 脚本仍可用：
 
 ```powershell
 cd D:\myprojects\codex-env-adapter
-
-# 1. 先看当前出口 IP、节点时区、代理和 ChatGPT 安装情况
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Show-CodexEnvironment.ps1
-
-# 2. 按节点时区启动 ChatGPT（若已在运行会先退出再拉起）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Launch-ChatGPT.ps1
-
-# 3. 可选：安装桌面快捷方式
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-DesktopShortcut.ps1
 ```
-
-也可以双击 `scripts\Launch-ChatGPT.cmd`。
 
 换节点后必须重新探测并重新启动 ChatGPT。`TZ` 只在进程启动时生效。
 
 ## 推荐使用方式
 
-1. 打开 Clash / 系统代理，确认 GPT 相关流量走目标节点。
-2. 运行 `Show-CodexEnvironment.ps1`，确认出口城市和时区符合预期。
-3. 用本仓库启动器打开 ChatGPT，不要从开始菜单直接开。
-4. 浏览器访问 chatgpt.com 时，另外用时区插件把浏览器时区改成同一 IANA 名称。
+1. 打开 Clash / 系统代理，确认 GPT 相关流量走 **同一个** 目标节点。
+2. 用启动器刷新探测，确认出口城市和时区符合预期。
+3. 点 **保存并启动 ChatGPT**，不要从开始菜单直接开。
+4. 浏览器访问 chatgpt.com 时，另外用时区插件把浏览器时区改成同一 IANA 名称，并且不要和桌面端同时挂着。
 
 手动指定时区：
 
@@ -58,14 +89,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Launch-ChatGPT.ps1
 ## 目录
 
 ```text
+src/CodexEnvAdapter/             Codex环境适配启动器（WinForms）
+dist/CodexEnvAdapter.exe         打包后的单文件 exe（本地生成，不入库）
+build.ps1                        重新打包 exe
 config/settings.example.json     配置示例
 docs/原理.md                     为什么要对齐网络和时区
 docs/使用指南.md                 日常操作与排错
-scripts/CodexEnv.psm1            探测 / 检查 / 启动的公共模块
-scripts/Show-CodexEnvironment.ps1  只检查，不启动
-scripts/Launch-ChatGPT.ps1       探测节点并启动 ChatGPT
-scripts/Launch-ChatGPT.cmd       双击入口
-scripts/Install-DesktopShortcut.ps1
+scripts/CodexEnv.psm1            PowerShell 版探测 / 启动模块
+scripts/Show-CodexEnvironment.ps1
+scripts/Launch-ChatGPT.ps1
 ```
 
 运行后的最近一次探测结果写在：

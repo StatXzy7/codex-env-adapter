@@ -14,3 +14,14 @@ config/settings.local.json
 .vscode/
 .idea/
 *.swp
+*.user
+
+# build
+bin/
+obj/
+dist/
+publish/
+*.pdb
+
+# unredacted captures
+docs/images/_raw-*.png
