@@ -34,7 +34,31 @@
 
 不下载、不运行第三方「时区启动器」exe。脚本都在 `scripts/` 里，可直接阅读。
 
-## 快速开始
+## 各系统怎么适配
+
+时区对不齐出口，在 macOS / Linux 上同样可能出现，但 **只有 Windows 值得做 exe**。
+
+| 系统 | 做法 |
+|------|------|
+| Windows | 用本仓库 Release 里的桌面启动器 |
+| macOS | 双击 `scripts/macos/Launch-Codex.command`，或跑 `scripts/unix/launch-codex.sh`。不要再做一个 .dmg |
+| Linux | `scripts/unix/launch-codex.sh`；可选用 `scripts/linux/install-desktop-entry.sh` 做成菜单项 |
+| 浏览器 | 时区插件，IANA 与节点一致 |
+| 手机 | 不要做 App；不要和电脑同时登录 |
+
+详见 [docs/平台说明.md](docs/平台说明.md)。
+
+macOS / Linux 示例：
+
+```bash
+chmod +x scripts/unix/launch-codex.sh
+./scripts/unix/launch-codex.sh            # 探测并启动桌面端
+./scripts/unix/launch-codex.sh --show     # 只看出口和时区
+./scripts/unix/launch-codex.sh --cli      # 给 Codex CLI 注入 TZ
+TZ=America/Los_Angeles ./scripts/unix/launch-codex.sh --timezone America/Los_Angeles
+```
+
+## 快速开始（Windows）
 
 到 **Releases** 下载免安装 exe（约 50 MB，自包含，不需要再装 .NET）：
 
@@ -62,13 +86,12 @@ exe 放在 Release 附件里，不进 git 仓库。
 重新编译：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File D:\myprojects\codex-env-adapter\build.ps1
+.\build.ps1
 ```
 
 PowerShell 脚本仍可用：
 
 ```powershell
-cd D:\myprojects\codex-env-adapter
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Show-CodexEnvironment.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Launch-ChatGPT.ps1
 ```
@@ -96,8 +119,12 @@ dist/CodexEnvAdapter.exe         本地打包产物（不入库，请从 Release
 build.ps1                        重新打包 exe
 config/settings.example.json     配置示例
 docs/原理.md                     为什么要对齐网络和时区
+docs/平台说明.md                 Windows / macOS / Linux / 手机分别怎么做
 docs/使用指南.md                 日常操作与排错
 scripts/CodexEnv.psm1            PowerShell 版探测 / 启动模块
+scripts/unix/launch-codex.sh     macOS / Linux 启动脚本
+scripts/macos/Launch-Codex.command
+scripts/linux/install-desktop-entry.sh
 scripts/Show-CodexEnvironment.ps1
 scripts/Launch-ChatGPT.ps1
 ```
@@ -106,14 +133,14 @@ scripts/Launch-ChatGPT.ps1
 
 `%LOCALAPPDATA%\CodexEnvAdapter\settings.json`
 
-## 和代理仓库的关系
+## 和代理的关系
 
-VPS / Clash 节点本身在 `D:\myprojects\vps-racknerd`。本仓库不管怎么搭代理，只负责：
+本仓库不管怎么搭代理，只负责：
 
 - 确认 **现在** 的出口是哪
 - 把 ChatGPT 桌面端的 `TZ` 对齐到这个出口
 
-当前这台机器上实测过的一组环境：
+示例环境（与截图一致，不含真实 IP）：
 
 - 出口：美国加州圣何塞，时区 `America/Los_Angeles`
 - Windows 时区：`China Standard Time`（未改）
