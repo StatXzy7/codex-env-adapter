@@ -36,11 +36,13 @@
 
 ## 快速开始
 
-日常双击 **Codex环境适配启动器**：
+到 **Releases** 下载免安装 exe（约 50 MB，自包含，不需要再装 .NET）：
 
-`D:\myprojects\codex-env-adapter\dist\CodexEnvAdapter.exe`
+https://github.com/StatXzy7/codex-env-adapter/releases/latest
 
-不需要安装 .NET。第一次打开后点 **创建桌面快捷方式**。
+下载 `CodexEnvAdapter-1.0.0-win-x64.exe` 后双击即可。第一次打开后可点 **创建桌面快捷方式**。
+
+exe 放在 Release 附件里，不进 git 仓库。
 
 1. 先打开 Clash / 系统代理，并固定到同一个节点
 2. 点 **刷新探测**，确认出口城市和时区
@@ -90,7 +92,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Launch-ChatGPT.ps1
 
 ```text
 src/CodexEnvAdapter/             Codex环境适配启动器（WinForms）
-dist/CodexEnvAdapter.exe         打包后的单文件 exe（本地生成，不入库）
+dist/CodexEnvAdapter.exe         本地打包产物（不入库，请从 Release 下载）
 build.ps1                        重新打包 exe
 config/settings.example.json     配置示例
 docs/原理.md                     为什么要对齐网络和时区
