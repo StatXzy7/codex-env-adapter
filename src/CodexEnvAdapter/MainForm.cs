@@ -33,13 +33,13 @@ sealed class MainForm : Form
     };
     readonly CheckBox _restartBox = new()
     {
-        Text = "启动前结束已运行的 ChatGPT（TZ 只在启动时生效）",
+        Text = "启动前结束已运行的 Codex（时区只在启动时生效）",
         AutoSize = true,
         Checked = true
     };
     readonly Button _refreshButton = new() { Text = "刷新探测", Width = 120, Height = 36 };
     readonly Button _shortcutButton = new() { Text = "创建桌面快捷方式", Width = 160, Height = 36 };
-    readonly Button _launchButton = new() { Text = "保存并启动 ChatGPT", Width = 220, Height = 42 };
+    readonly Button _launchButton = new() { Text = "保存并启动 Codex", Width = 220, Height = 42 };
     readonly TextBox _logBox = new()
     {
         Multiline = true,
@@ -323,31 +323,31 @@ sealed class MainForm : Form
             {
                 if (!_restartBox.Checked)
                 {
-                    throw new InvalidOperationException("ChatGPT 正在运行。TZ 只在进程启动时生效，请先退出或勾选重启。");
+                    throw new InvalidOperationException("Codex 正在运行。时区只在进程启动时生效，请先退出或勾选重启。");
                 }
 
-                Log("正在结束已运行的 ChatGPT…");
+                Log("正在结束已运行的 Codex…");
                 await Task.Run(() => ChatGptLauncher.StopRunning(TimeSpan.FromSeconds(15)), _cts.Token);
                 if (IsDisposed) return;
             }
 
-            Log($"正在用 TZ={timezone} 启动 ChatGPT…");
-            var proc = ChatGptLauncher.StartWithTimezone(app.Exe, timezone);
+            Log($"正在用 TZ={timezone} 启动 Codex {app.Version}…");
+            var proc = ChatGptLauncher.StartWithTimezone(app, timezone);
             await Task.Delay(1500, _cts.Token);
             if (IsDisposed) return;
 
             proc.Refresh();
             if (proc.HasExited)
             {
-                throw new InvalidOperationException("ChatGPT 单实例仍在运行，带 TZ 的新进程没有留下来。请勾选重启后再试。");
+                throw new InvalidOperationException("Codex 启动后马上退出了。请先完全退出托盘里的 Codex 再试。");
             }
 
             if (ChatGptLauncher.GetRunningCount() == 0)
             {
-                throw new InvalidOperationException("ChatGPT 启动后没有保持运行。");
+                throw new InvalidOperationException("Codex 启动后没有保持运行。");
             }
 
-            Log($"已启动 ChatGPT（PID {proc.Id}）。Windows 系统时区未改动。");
+            Log($"已启动 Codex（PID {proc.Id}，TZ={timezone}）。Windows 系统时区未改动。");
         }
         catch (OperationCanceledException)
         {

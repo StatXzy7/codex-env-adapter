@@ -7,7 +7,8 @@ static class ChatGptLauncher
 {
     public static ChatGptInstall FindInstall()
     {
-        var location = QueryInstallLocation();
+        var info = QueryPackage();
+        var location = info.InstallLocation;
         if (string.IsNullOrWhiteSpace(location))
         {
             throw new InvalidOperationException("未找到已安装的 ChatGPT / Codex 桌面应用（包名 OpenAI.Codex）。");
@@ -21,9 +22,11 @@ static class ChatGptLauncher
 
         return new ChatGptInstall
         {
-            Version = TryParseVersion(location),
+            Version = info.Version,
             Exe = exe,
             InstallLocation = location,
+            PackageFullName = info.PackageFullName,
+            PackageFamilyName = info.PackageFamilyName,
             RunningCount = GetRunningCount()
         };
     }
@@ -61,25 +64,8 @@ static class ChatGptLauncher
         }
     }
 
-    public static Process StartWithTimezone(string exe, string timezone)
-    {
-        var start = new ProcessStartInfo
-        {
-            FileName = exe,
-            WorkingDirectory = Path.GetDirectoryName(exe) ?? "",
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        start.Environment["TZ"] = timezone;
-
-        var proc = Process.Start(start);
-        if (proc is null)
-        {
-            throw new InvalidOperationException("启动 ChatGPT 失败。");
-        }
-
-        return proc;
-    }
+    public static Process StartWithTimezone(ChatGptInstall install, string timezone) =>
+        PackagedLaunch.Launch(install, timezone);
 
     public static void CreateDesktopShortcut(string targetPath)
     {
@@ -102,12 +88,12 @@ static class ChatGptLauncher
         shortcut.Save();
     }
 
-    static string QueryInstallLocation()
+    static PackageQuery QueryPackage()
     {
         var start = new ProcessStartInfo
         {
             FileName = "powershell.exe",
-            Arguments = "-NoProfile -NonInteractive -Command \"(Get-AppxPackage -Name OpenAI.Codex | Select-Object -First 1).InstallLocation\"",
+            Arguments = "-NoProfile -NonInteractive -Command \"$pkg = Get-AppxPackage -Name OpenAI.Codex | Select-Object -First 1; if ($pkg) { [pscustomobject]@{ InstallLocation = $pkg.InstallLocation; Version = [string]$pkg.Version; PackageFullName = $pkg.PackageFullName; PackageFamilyName = $pkg.PackageFamilyName } | ConvertTo-Json -Compress }\"",
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -126,15 +112,22 @@ static class ChatGptLauncher
             throw new TimeoutException("查询 Codex 安装路径超时。");
         }
 
-        var output = stdoutTask.GetAwaiter().GetResult().Trim();
+        var output = stdoutTask.GetAwaiter().GetResult().Trim().TrimStart('\uFEFF');
         stderrTask.GetAwaiter().GetResult();
-        return output;
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return new PackageQuery();
+        }
+
+        var dto = System.Text.Json.JsonSerializer.Deserialize<PackageQuery>(output);
+        return dto ?? new PackageQuery();
     }
 
-    static string TryParseVersion(string installLocation)
+    sealed class PackageQuery
     {
-        var name = Path.GetFileName(installLocation.TrimEnd(Path.DirectorySeparatorChar));
-        var parts = name.Split('_');
-        return parts.Length > 1 ? parts[1] : name;
+        public string InstallLocation { get; set; } = "";
+        public string Version { get; set; } = "";
+        public string PackageFullName { get; set; } = "";
+        public string PackageFamilyName { get; set; } = "";
     }
 }

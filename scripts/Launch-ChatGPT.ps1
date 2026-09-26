@@ -30,7 +30,7 @@ Write-Host ("出口 IP      : {0}" -f $node.PublicIp)
 Write-Host ("节点位置     : {0}, {1}, {2}" -f $node.City, $node.Region, $node.Country)
 Write-Host ("注入 TZ      : {0}" -f $Timezone)
 Write-Host ("用户代理     : enable={0} server={1}" -f $proxy.UserProxyEnable, $proxy.UserProxyServer)
-Write-Host ("ChatGPT 版本 : {0}" -f $app.Version)
+Write-Host ("Codex 版本   : {0}" -f $app.Version)
 Write-Host ("可执行文件   : {0}" -f $app.Exe)
 Write-Host ("设置文件     : {0}" -f $settingsPath)
 Write-Host ""
@@ -57,5 +57,5 @@ if ($alive.Count -eq 0) {
     throw "ChatGPT 启动后没有保持运行。"
 }
 
-Write-Host ("已用 TZ={0} 启动 ChatGPT（PID {1}）。" -f $Timezone, $proc.Id)
+Write-Host ("已用 TZ={0} 启动 Codex（PID {1}）。" -f $Timezone, $proc.Id)
 Write-Host "Windows 系统时区未改动。"

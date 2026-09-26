@@ -64,13 +64,13 @@ TZ=America/Los_Angeles ./scripts/unix/launch-codex.sh --timezone America/Los_Ang
 
 https://github.com/StatXzy7/codex-env-adapter/releases/latest
 
-下载 `CodexEnvAdapter-1.0.0-win-x64.exe` 后双击即可。第一次打开后可点 **创建桌面快捷方式**。
+下载 `CodexEnvAdapter-1.1.0-win-x64.exe` 后双击即可。第一次打开后可点 **创建桌面快捷方式**。
 
 exe 放在 Release 附件里，不进 git 仓库。
 
 1. 先打开 Clash / 系统代理，并固定到同一个节点
 2. 点 **刷新探测**，确认出口城市和时区
-3. 点 **保存并启动 ChatGPT**
+3. 点 **保存并启动 Codex**
 4. 不要从开始菜单再开一次 ChatGPT，也不要同时开网页版 / 手机 App
 
 ## 界面示例
@@ -96,13 +96,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Show-CodexEnvironm
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Launch-ChatGPT.ps1
 ```
 
+Windows 上单独开 Codex CLI：
+
+```powershell
+$env:TZ = "America/Los_Angeles"; codex
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Launch-CodexCli.ps1
+```
+
 换节点后必须重新探测并重新启动 ChatGPT。`TZ` 只在进程启动时生效。
 
 ## 推荐使用方式
 
 1. 打开 Clash / 系统代理，确认 GPT 相关流量走 **同一个** 目标节点。
 2. 用启动器刷新探测，确认出口城市和时区符合预期。
-3. 点 **保存并启动 ChatGPT**，不要从开始菜单直接开。
+3. 点 **保存并启动 Codex**，不要从开始菜单直接开。
 4. 浏览器访问 chatgpt.com 时，另外用时区插件把浏览器时区改成同一 IANA 名称，并且不要和桌面端同时挂着。
 
 手动指定时区：
@@ -144,4 +151,4 @@ scripts/Launch-ChatGPT.ps1
 
 - 出口：美国加州圣何塞，时区 `America/Los_Angeles`
 - Windows 时区：`China Standard Time`（未改）
-- ChatGPT 包：`OpenAI.Codex`，启动文件为 `app\ChatGPT.exe`
+- ChatGPT 包：`OpenAI.Codex`。26.924 起由包激活接口启动 `app\ChatGPT.exe`，并在进程恢复前写入 `TZ`

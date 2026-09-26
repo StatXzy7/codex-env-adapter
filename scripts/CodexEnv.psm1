@@ -86,13 +86,45 @@ function Get-ChatGPTInstall {
     }
 
     [pscustomobject]@{
-        Name            = $pkg.Name
-        Version         = [string]$pkg.Version
-        PackageFullName = $pkg.PackageFullName
-        InstallLocation = $pkg.InstallLocation
-        Exe             = $exe
-        RunningCount    = @(Get-Process -Name ChatGPT -ErrorAction SilentlyContinue).Count
+        Name              = $pkg.Name
+        Version           = [string]$pkg.Version
+        PackageFullName   = $pkg.PackageFullName
+        PackageFamilyName = $pkg.PackageFamilyName
+        InstallLocation   = $pkg.InstallLocation
+        Exe               = $exe
+        RunningCount      = @(Get-Process -Name ChatGPT -ErrorAction SilentlyContinue).Count
     }
+}
+
+function Get-CodexCliCommand {
+    [CmdletBinding()]
+    param()
+
+    $cmd = Get-Command codex -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cmd) {
+        return [pscustomobject]@{
+            Command = "codex"
+            Source  = [string]$cmd.Source
+            Kind    = [string]$cmd.CommandType
+        }
+    }
+
+    $candidates = @(
+        (Join-Path $env:APPDATA "npm\codex.cmd"),
+        (Join-Path $env:APPDATA "npm\codex.ps1"),
+        (Join-Path $env:LOCALAPPDATA "pnpm\codex.exe")
+    )
+    foreach ($path in $candidates) {
+        if (Test-Path -LiteralPath $path) {
+            return [pscustomobject]@{
+                Command = $path
+                Source  = $path
+                Kind    = "Path"
+            }
+        }
+    }
+
+    throw "未找到 Codex CLI（PATH 里没有 codex）。可用 npm i -g @openai/codex 安装。"
 }
 
 function Get-WindowsTimezoneInfo {
@@ -175,18 +207,83 @@ function Start-ChatGPTAligned {
         [string]$Timezone
     )
 
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $Exe
-    $psi.WorkingDirectory = Split-Path -Parent $Exe
-    $psi.UseShellExecute = $false
-    $psi.CreateNoWindow = $true
-    $null = $psi.EnvironmentVariables["TZ"]
-    $psi.EnvironmentVariables["TZ"] = $Timezone
-    $proc = [System.Diagnostics.Process]::Start($psi)
-    if (-not $proc) {
-        throw "启动 ChatGPT 失败。"
+    $app = Get-ChatGPTInstall
+    if ([string]::IsNullOrWhiteSpace($app.PackageFullName)) {
+        throw "没有读到 Codex 的包标识，无法启动 $Exe。"
     }
-    return $proc
+
+    $injector = Join-Path $PSScriptRoot "Inject-CodexTimezone.ps1"
+    $powershell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    $command = '"' + $powershell + '" -NoProfile -ExecutionPolicy Bypass -File "' + $injector + '" -Timezone ' + $Timezone
+    $debug = New-CodexPackageDebugSettings
+    $enableHr = $debug.EnableDebugging($app.PackageFullName, $command, [IntPtr]::Zero)
+    if ($enableHr -lt 0) {
+        throw ("无法进入 Codex 包启动上下文，HRESULT=0x{0:X8}" -f $enableHr)
+    }
+
+    try {
+        $activated = Start-CodexPackageActivation ($app.PackageFamilyName + "!App")
+        if ($activated.Hr -lt 0 -or $activated.Pid -eq 0) {
+            throw ("激活 Codex 失败，HRESULT=0x{0:X8}" -f $activated.Hr)
+        }
+
+        $deadline = (Get-Date).AddSeconds(45)
+        do {
+            Start-Sleep -Milliseconds 300
+            $proc = Get-Process -Id $activated.Pid -ErrorAction SilentlyContinue
+            if (-not $proc) {
+                throw "Codex 进程已退出。"
+            }
+            if ($proc.MainWindowHandle -ne 0) {
+                return $proc
+            }
+        } while ((Get-Date) -lt $deadline)
+
+        Stop-Process -Id $activated.Pid -Force -ErrorAction SilentlyContinue
+        throw "Codex 已创建但没有出现窗口。"
+    } finally {
+        try { $debug.DisableDebugging($app.PackageFullName) | Out-Null } catch { }
+    }
+}
+
+function New-CodexPackageDebugSettings {
+    if (-not ("CodexEnvAdapter.Native.PackageDebug" -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace CodexEnvAdapter.Native {
+  public static class PackageDebug {
+    [ComImport, Guid("F27C3930-8029-4AD1-94E3-3DBA417810C1"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IPackageDebugSettings {
+      [PreserveSig] int EnableDebugging([MarshalAs(UnmanagedType.LPWStr)] string packageFullName, [MarshalAs(UnmanagedType.LPWStr)] string debuggerCommandLine, IntPtr environment);
+      [PreserveSig] int DisableDebugging([MarshalAs(UnmanagedType.LPWStr)] string packageFullName);
+    }
+    [ComImport, Guid("2e941141-7f97-4756-ba1d-9decde894a3d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IApplicationActivationManager {
+      [PreserveSig] int ActivateApplication([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId, [MarshalAs(UnmanagedType.LPWStr)] string arguments, int options, out uint processId);
+    }
+    public static IPackageDebugSettings Debug() {
+      var type = Type.GetTypeFromCLSID(new Guid("B1AEC16F-2383-4852-B0E9-8F0B1DC66B4D"));
+      return (IPackageDebugSettings)Activator.CreateInstance(type);
+    }
+    public static IApplicationActivationManager Activate() {
+      var type = Type.GetTypeFromCLSID(new Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C"));
+      return (IApplicationActivationManager)Activator.CreateInstance(type);
+    }
+  }
+}
+'@
+    }
+
+    return [CodexEnvAdapter.Native.PackageDebug]::Debug()
+}
+
+function Start-CodexPackageActivation {
+    param([string]$AppUserModelId)
+    $manager = [CodexEnvAdapter.Native.PackageDebug]::Activate()
+    $processId = [uint32]0
+    $hr = $manager.ActivateApplication($AppUserModelId, "", 0, [ref]$processId)
+    [pscustomobject]@{ Hr = [int]$hr; Pid = [int]$processId }
 }
 
 function Save-CodexEnvSettings {
@@ -222,6 +319,7 @@ Export-ModuleMember -Function @(
     "Get-WindowsProxyStatus",
     "Get-ChatGPTInstall",
     "Get-WindowsTimezoneInfo",
+    "Get-CodexCliCommand",
     "Get-CodexEnvironmentReport",
     "Stop-ChatGPTProcesses",
     "Start-ChatGPTAligned",

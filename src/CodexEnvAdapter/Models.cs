@@ -34,6 +34,8 @@ sealed class ChatGptInstall
     public string Version { get; init; } = "";
     public string Exe { get; init; } = "";
     public string InstallLocation { get; init; } = "";
+    public string PackageFullName { get; init; } = "";
+    public string PackageFamilyName { get; init; } = "";
     public int RunningCount { get; init; }
 }
 
