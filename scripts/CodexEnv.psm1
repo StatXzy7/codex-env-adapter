@@ -299,16 +299,23 @@ function Save-CodexEnvSettings {
     $dir = Join-Path $env:LOCALAPPDATA "CodexEnvAdapter"
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $path = Join-Path $dir "settings.json"
+    $existing = $null
+    if (Test-Path -LiteralPath $path) {
+        try { $existing = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
+    }
     $payload = @{
-        timezone    = $Timezone
-        publicIp    = $Node.PublicIp
-        city        = $Node.City
-        region      = $Node.Region
-        country     = $Node.Country
-        org         = $Node.Org
-        source      = $Node.Source
-        systemTz    = (Get-TimeZone).Id
-        updatedAt   = (Get-Date).ToString("s")
+        timezone         = $Timezone
+        publicIp         = $Node.PublicIp
+        city             = $Node.City
+        region           = $Node.Region
+        country          = $Node.Country
+        org              = $Node.Org
+        source           = $Node.Source
+        systemTz         = (Get-TimeZone).Id
+        updatedAt        = (Get-Date).ToString("s")
+        appProxyEnabled  = $(if ($null -ne $existing.appProxyEnabled) { [bool]$existing.appProxyEnabled } else { $true })
+        appProxyServer   = $(if ($existing.appProxyServer) { [string]$existing.appProxyServer } else { "127.0.0.1:7890" })
+        cliProxyEnabled  = $(if ($null -ne $existing.cliProxyEnabled) { [bool]$existing.cliProxyEnabled } else { $true })
     } | ConvertTo-Json
     Set-Content -Path $path -Value $payload -Encoding UTF8
     return $path

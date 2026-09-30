@@ -28,7 +28,7 @@
 | 项目 | 行为 |
 |------|------|
 | 出口探测 | 读取当前公网 IP、城市、国家、IANA 时区 |
-| 代理检查 | 显示用户代理 / WinHTTP / 进程代理变量，不擅自改代理 |
+| 应用代理 | 只注入 ChatGPT、Codex CLI、Claude Code 和 Firefox。不改系统代理，不写用户级 `HTTP_PROXY` |
 | 时区注入 | 只给 ChatGPT 进程设置 `TZ` |
 | 系统时区 | 保持原样，例如继续用中国标准时间 |
 
@@ -64,11 +64,26 @@ TZ=America/Los_Angeles ./scripts/unix/launch-codex.sh --timezone America/Los_Ang
 
 https://github.com/StatXzy7/codex-env-adapter/releases/latest
 
-下载 `CodexEnvAdapter-1.1.0-win-x64.exe` 后双击即可。第一次打开后可点 **创建桌面快捷方式**。
+下载 `CodexEnvAdapter-1.2.0-win-x64.exe` 后双击即可。第一次打开后可点 **创建桌面快捷方式**。
+
+## v1.2.0（2026-09-30，今天仍然可用）
+
+v1.1.0 只给 Codex 桌面端注入时区，流量仍靠系统代理或全局 `HTTP_PROXY`。这两处会把整台电脑都送进代理；不开 TUN 时，Firefox 的 HTTP/3 还会绕过代理直连。
+
+v1.2.0 把代理收进实际要用的程序，Clash 继续听本地端口（默认 `127.0.0.1:7890`）：
+
+| 改动 | 原因 |
+|------|------|
+| ChatGPT 只在本次启动的进程里写入代理变量，并加上 `--proxy-server` | 不改系统代理，也不写用户级环境变量。开始菜单直接打开的进程拿不到这次注入 |
+| 可选的 `codex` / `claude` 终端入口 | 新开的终端里，只有这两个命令自己的进程走同一代理 |
+| Firefox 固定走该 HTTP 代理，并关闭 HTTP/3 直连 | 不开 TUN 时，HTTP/3 和 DoH 会绕过系统代理。同时放开 Cloudflare Turnstile 的存储权限，避免 ChatGPT 网页锁定检查一直 403 |
+| 继续用包激活启动 Codex，并在窗口出现前写入 `TZ` | 直接启动 `ChatGPT.exe` 没有 MSIX 包标识，会在引导阶段退出。2026-09-30 这套启动方式仍然可用 |
+
+Chrome / Edge 仍认 Clash 打开的系统代理。换节点后先刷新探测，再重新启动 ChatGPT。
 
 exe 放在 Release 附件里，不进 git 仓库。
 
-1. 先打开 Clash / 系统代理，并固定到同一个节点
+1. 先打开 Clash，让它监听启动器里的代理端口（默认 7890），并固定到同一个节点。不必开系统代理
 2. 点 **刷新探测**，确认出口城市和时区
 3. 点 **保存并启动 Codex**
 4. 不要从开始菜单再开一次 ChatGPT，也不要同时开网页版 / 手机 App
@@ -107,7 +122,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Launch-CodexCli.ps
 
 ## 推荐使用方式
 
-1. 打开 Clash / 系统代理，确认 GPT 相关流量走 **同一个** 目标节点。
+1. 打开 Clash，确认它监听启动器里的代理端口，GPT 相关流量走 **同一个** 目标节点。不必开系统代理。
 2. 用启动器刷新探测，确认出口城市和时区符合预期。
 3. 点 **保存并启动 Codex**，不要从开始菜单直接开。
 4. 浏览器访问 chatgpt.com 时，另外用时区插件把浏览器时区改成同一 IANA 名称，并且不要和桌面端同时挂着。

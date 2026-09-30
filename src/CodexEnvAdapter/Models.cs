@@ -73,6 +73,15 @@ sealed class AppSettings
 
     [JsonPropertyName("updatedAt")]
     public string? UpdatedAt { get; set; }
+
+    [JsonPropertyName("appProxyEnabled")]
+    public bool AppProxyEnabled { get; set; } = true;
+
+    [JsonPropertyName("appProxyServer")]
+    public string AppProxyServer { get; set; } = AppProxy.DefaultServer;
+
+    [JsonPropertyName("cliProxyEnabled")]
+    public bool CliProxyEnabled { get; set; } = true;
 }
 
 sealed class IpLookupDto

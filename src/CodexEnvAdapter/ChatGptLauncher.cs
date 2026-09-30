@@ -64,8 +64,8 @@ static class ChatGptLauncher
         }
     }
 
-    public static Process StartWithTimezone(ChatGptInstall install, string timezone) =>
-        PackagedLaunch.Launch(install, timezone);
+    public static Process StartWithTimezone(ChatGptInstall install, string timezone, string? proxyHostPort = null) =>
+        PackagedLaunch.Launch(install, timezone, proxyHostPort);
 
     public static void CreateDesktopShortcut(string targetPath)
     {

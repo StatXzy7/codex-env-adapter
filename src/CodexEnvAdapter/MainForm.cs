@@ -37,6 +37,23 @@ sealed class MainForm : Form
         AutoSize = true,
         Checked = true
     };
+    readonly CheckBox _appProxyBox = new()
+    {
+        Text = "ChatGPT、Codex、Claude Code 和 Firefox 使用下面的代理",
+        AutoSize = true,
+        Checked = true
+    };
+    readonly TextBox _proxyServerBox = new()
+    {
+        Width = 220,
+        Text = AppProxy.DefaultServer
+    };
+    readonly CheckBox _cliProxyBox = new()
+    {
+        Text = "终端里输入 codex / claude 也使用（不改系统代理）",
+        AutoSize = true,
+        Checked = true
+    };
     readonly Button _refreshButton = new() { Text = "刷新探测", Width = 120, Height = 36 };
     readonly Button _shortcutButton = new() { Text = "创建桌面快捷方式", Width = 160, Height = 36 };
     readonly Button _launchButton = new() { Text = "保存并启动 Codex", Width = 220, Height = 42 };
@@ -58,8 +75,8 @@ sealed class MainForm : Form
     {
         Text = "Codex环境适配启动器";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(580, 720);
-        Size = new Size(620, 780);
+        MinimumSize = new Size(600, 860);
+        Size = new Size(640, 920);
         Font = new Font("Microsoft YaHei UI", 9F);
 
         _timezoneBox.Items.AddRange(CommonTimezones);
@@ -67,11 +84,13 @@ sealed class MainForm : Form
         _manualTz.CheckedChanged += (_, _) => _timezoneBox.Enabled = _manualTz.Checked;
         _timezoneBox.Enabled = false;
 
+        _appProxyBox.CheckedChanged += (_, _) => _proxyServerBox.Enabled = _appProxyBox.Checked;
         _refreshButton.Click += async (_, _) => await RefreshAsync();
         _launchButton.Click += async (_, _) => await LaunchAsync();
         _shortcutButton.Click += (_, _) => CreateShortcut();
         FormClosing += (_, _) =>
         {
+            try { PersistProxy(false); } catch { }
             try { _cts.Cancel(); } catch { }
         };
 
@@ -79,6 +98,15 @@ sealed class MainForm : Form
         Load += async (_, _) =>
         {
             LoadSavedSettings();
+            try
+            {
+                PersistProxy(true);
+            }
+            catch (Exception ex)
+            {
+                Log("应用代理尚未生效：" + ex.Message);
+            }
+
             await RefreshAsync();
         };
     }
@@ -90,8 +118,9 @@ sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(16),
             ColumnCount = 1,
-            RowCount = 6
+            RowCount = 7
         };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -102,8 +131,8 @@ sealed class MainForm : Form
         var intro = new Label
         {
             AutoSize = true,
-            Text = "只给 ChatGPT / Codex 注入 TZ，不改系统时区。社区共识：多 IP、多设备同时登录也可能降智，请固定一个出口、一台主力设备。",
-            MaximumSize = new Size(540, 0)
+            Text = "只给 ChatGPT / Codex 注入时区，不改系统时区。代理只注入到 ChatGPT、Codex CLI 和 Claude Code，不写系统代理，也不写全局 HTTP_PROXY。",
+            MaximumSize = new Size(560, 0)
         };
 
         root.Controls.Add(intro, 0, 0);
@@ -130,6 +159,33 @@ sealed class MainForm : Form
         tzPanel.Controls.Add(_restartBox);
         root.Controls.Add(MakeGroup("注入时区", tzPanel), 0, 3);
 
+        var proxyPanel = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Dock = DockStyle.Fill
+        };
+        var proxyRow = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
+        proxyRow.Controls.Add(new Label { Text = "代理地址", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+        proxyRow.Controls.Add(_proxyServerBox);
+        var proxyHint = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(540, 0),
+            Text = "开始菜单直接打开的 ChatGPT 不会带上这个代理，请用本启动器打开。Firefox 会固定走这个地址的 HTTP 代理，并关闭 HTTP/3 直连，这样不开 TUN 也会走代理；改完需要重启 Firefox。Chrome / Edge 认 Clash 打开的系统代理。Clash 继续听这个端口即可。"
+        };
+        proxyPanel.Controls.Add(_appProxyBox);
+        proxyPanel.Controls.Add(proxyRow);
+        proxyPanel.Controls.Add(_cliProxyBox);
+        proxyPanel.Controls.Add(proxyHint);
+        root.Controls.Add(MakeGroup("应用代理", proxyPanel), 0, 4);
+
         var buttons = new FlowLayoutPanel
         {
             AutoSize = true,
@@ -141,8 +197,8 @@ sealed class MainForm : Form
         buttons.Controls.Add(_launchButton);
         buttons.Controls.Add(_refreshButton);
         buttons.Controls.Add(_shortcutButton);
-        root.Controls.Add(buttons, 0, 4);
-        root.Controls.Add(MakeGroup("日志", _logBox), 0, 5);
+        root.Controls.Add(buttons, 0, 5);
+        root.Controls.Add(MakeGroup("日志", _logBox), 0, 6);
         return root;
     }
 
@@ -200,6 +256,12 @@ sealed class MainForm : Form
         _autoTz.Checked = settings.AutoTimezone;
         _manualTz.Checked = !settings.AutoTimezone;
         _restartBox.Checked = settings.RestartChatGpt;
+        _appProxyBox.Checked = settings.AppProxyEnabled;
+        _cliProxyBox.Checked = settings.CliProxyEnabled;
+        _proxyServerBox.Text = string.IsNullOrWhiteSpace(settings.AppProxyServer)
+            ? AppProxy.DefaultServer
+            : settings.AppProxyServer;
+        _proxyServerBox.Enabled = _appProxyBox.Checked;
         if (!string.IsNullOrWhiteSpace(settings.Timezone) && !_timezoneBox.Items.Contains(settings.Timezone))
         {
             _timezoneBox.Items.Insert(0, settings.Timezone);
@@ -253,9 +315,13 @@ sealed class MainForm : Form
             }
 
             Log($"出口 {_node.PublicIp} / {_node.LocationText} / TZ={_node.Timezone}");
-            if (!proxy.UserProxyEnable)
+            if (_appProxyBox.Checked && AppProxy.TryNormalize(_proxyServerBox.Text, out var appProxy))
             {
-                Log("警告：当前看不到用户代理。若 GPT 需要走节点，请先打开 Clash / 系统代理。");
+                Log("系统代理" + (proxy.UserProxyEnable ? "开启" : "关闭") + "。ChatGPT / Codex / Claude Code 使用 " + appProxy + "。");
+                if (!await ProxyPortOpenAsync(appProxy))
+                {
+                    Log("警告：这个端口当前没有程序监听。请让 Clash 的 mixed 端口保持为 " + appProxy + "。");
+                }
             }
         }
         catch (OperationCanceledException)
@@ -303,6 +369,7 @@ sealed class MainForm : Form
             if (IsDisposed) return;
             _app = app;
 
+            var proxyHostPort = ReadProxyHostPort();
             var settings = new AppSettings
             {
                 Timezone = timezone,
@@ -314,9 +381,13 @@ sealed class MainForm : Form
                 Country = _node.Country,
                 Org = _node.Org,
                 Source = _node.Source,
-                SystemTz = WindowsEnv.GetSystemTimezoneId()
+                SystemTz = WindowsEnv.GetSystemTimezoneId(),
+                AppProxyEnabled = _appProxyBox.Checked,
+                AppProxyServer = _proxyServerBox.Text.Trim(),
+                CliProxyEnabled = _cliProxyBox.Checked
             };
             SettingsStore.Save(settings);
+            Log(CliProxy.Sync(_cliProxyBox.Checked, proxyHostPort));
 
             var running = ChatGptLauncher.GetRunningCount();
             if (running > 0)
@@ -331,8 +402,9 @@ sealed class MainForm : Form
                 if (IsDisposed) return;
             }
 
-            Log($"正在用 TZ={timezone} 启动 Codex {app.Version}…");
-            var proc = ChatGptLauncher.StartWithTimezone(app, timezone);
+            var proxyText = proxyHostPort is null ? "直连" : proxyHostPort;
+            Log($"正在用 TZ={timezone}、代理 {proxyText} 启动 Codex {app.Version}…");
+            var proc = ChatGptLauncher.StartWithTimezone(app, timezone, proxyHostPort);
             await Task.Delay(1500, _cts.Token);
             if (IsDisposed) return;
 
@@ -347,7 +419,12 @@ sealed class MainForm : Form
                 throw new InvalidOperationException("Codex 启动后没有保持运行。");
             }
 
-            Log($"已启动 Codex（PID {proc.Id}，TZ={timezone}）。Windows 系统时区未改动。");
+            Log($"已启动 Codex（PID {proc.Id}，TZ={timezone}，代理 {proxyText}）。系统时区和系统代理都未改动。");
+            var injectLog = Path.Combine(SettingsStore.DirectoryPath, "inject.log");
+            if (File.Exists(injectLog) && File.ReadAllText(injectLog).Contains("proxy-cmdline-failed", StringComparison.Ordinal))
+            {
+                Log("警告：ChatGPT 的代理启动参数没有写进去。环境变量已写入，若桌面端仍不走代理，请看 inject.log。");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -386,6 +463,74 @@ sealed class MainForm : Form
         {
             Log("创建快捷方式失败：" + ex.Message);
             MessageBox.Show(this, ex.Message, "快捷方式失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    string? ReadProxyHostPort()
+    {
+        if (!_appProxyBox.Checked)
+        {
+            return null;
+        }
+
+        if (!AppProxy.TryNormalize(_proxyServerBox.Text, out var hostPort))
+        {
+            throw new InvalidOperationException("代理地址无效。请填写 127.0.0.1:7890 这样的地址。");
+        }
+
+        _proxyServerBox.Text = hostPort;
+        return hostPort;
+    }
+
+    string PersistProxy(bool logResult)
+    {
+        var proxyHostPort = ReadProxyHostPort();
+        var settings = SettingsStore.Load();
+        settings.AppProxyEnabled = _appProxyBox.Checked;
+        settings.AppProxyServer = _proxyServerBox.Text.Trim();
+        settings.CliProxyEnabled = _cliProxyBox.Checked;
+        SettingsStore.Save(settings);
+        var message = CliProxy.Sync(_cliProxyBox.Checked, proxyHostPort);
+        if (logResult && !IsDisposed)
+        {
+            Log(message);
+        }
+
+        return message;
+    }
+
+    static async Task<bool> ProxyPortOpenAsync(string hostPort)
+    {
+        var split = hostPort.LastIndexOf(':');
+        if (split <= 0 || !int.TryParse(hostPort[(split + 1)..], out var port))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var client = new System.Net.Sockets.TcpClient();
+            var connect = client.ConnectAsync(hostPort[..split], port);
+            var finished = await Task.WhenAny(connect, Task.Delay(400));
+            if (finished != connect)
+            {
+                return false;
+            }
+
+            try
+            {
+                await connect;
+            }
+            catch
+            {
+                return false;
+            }
+
+            return client.Connected;
+        }
+        catch
+        {
+            return false;
         }
     }
 

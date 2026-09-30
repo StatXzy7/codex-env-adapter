@@ -37,8 +37,25 @@ static class PackagedLaunch
                 return;
             }
 
-            InjectTimezone(pid, timezone);
-            File.WriteAllText(logPath, $"ok pid={pid} tz={timezone}{Environment.NewLine}");
+            string? proxyHostPort = null;
+            var manageProxy = false;
+            if (TryGetArg(args, "--inject-proxy", out var proxyArg))
+            {
+                manageProxy = true;
+                if (!proxyArg.Equals("off", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!AppProxy.TryNormalize(proxyArg, out var normalized))
+                    {
+                        File.WriteAllText(logPath, "bad proxy\n");
+                        return;
+                    }
+
+                    proxyHostPort = normalized;
+                }
+            }
+
+            var proxyNote = InjectTimezone(pid, timezone, manageProxy, proxyHostPort);
+            File.WriteAllText(logPath, $"ok pid={pid} tz={timezone} {proxyNote}{Environment.NewLine}");
         }
         catch (Exception ex)
         {
@@ -46,7 +63,7 @@ static class PackagedLaunch
         }
     }
 
-    public static Process Launch(ChatGptInstall install, string timezone)
+    public static Process Launch(ChatGptInstall install, string timezone, string? proxyHostPort)
     {
         if (!IsSafeTimezone(timezone))
         {
@@ -64,7 +81,8 @@ static class PackagedLaunch
             throw new InvalidOperationException("找不到启动器自身路径，无法注入时区。");
         }
 
-        var command = Quote(self) + " --inject-tz " + timezone;
+        var proxyToken = string.IsNullOrWhiteSpace(proxyHostPort) ? "off" : proxyHostPort;
+        var command = Quote(self) + " --inject-tz " + timezone + " --inject-proxy " + proxyToken;
         var debug = CreateDebugSettings();
         var enableHr = debug.EnableDebugging(install.PackageFullName, command, IntPtr.Zero);
         if (enableHr < 0)
@@ -128,12 +146,12 @@ static class PackagedLaunch
         }
     }
 
-    public static void InjectTimezone(int pid, string timezone)
+    public static string InjectTimezone(int pid, string timezone, bool manageProxy = false, string? proxyHostPort = null)
     {
         using var proc = Process.GetProcessById(pid);
         if (proc.MainWindowHandle != IntPtr.Zero)
         {
-            return;
+            return "skipped-visible";
         }
 
         var access = ProcessQueryInformation | ProcessVmRead | ProcessVmWrite | ProcessVmOperation;
@@ -169,8 +187,18 @@ static class PackagedLaunch
 
             var entries = ParseEnvironment(current)
                 .Where(entry => !entry.StartsWith("TZ=", StringComparison.OrdinalIgnoreCase))
+                .Where(entry => !manageProxy || !ProxyEnvironment.IsProxyEntry(entry))
                 .ToList();
             entries.Add("TZ=" + timezone);
+            if (manageProxy && proxyHostPort is not null)
+            {
+                var url = AppProxy.ToHttpUrl(proxyHostPort);
+                entries.Add("HTTP_PROXY=" + url);
+                entries.Add("HTTPS_PROXY=" + url);
+                entries.Add("ALL_PROXY=" + url);
+                entries.Add("NO_PROXY=" + ProxyEnvironment.NoProxy);
+            }
+
             entries.Sort(StringComparer.OrdinalIgnoreCase);
             var block = BuildEnvironment(entries);
             var target = envAddress;
@@ -191,12 +219,78 @@ static class PackagedLaunch
             }
 
             WriteInt64(handle, parameters + 0x3F0, block.Length);
+            var proxyNote = manageProxy
+                ? (proxyHostPort is null ? "proxy=off" : "proxy=" + proxyHostPort)
+                : "proxy=inherit";
+            if (proxyHostPort is not null)
+            {
+                try
+                {
+                    AppendProxyServer(handle, parameters, proxyHostPort);
+                }
+                catch (Exception ex)
+                {
+                    proxyNote = "proxy-cmdline-failed " + ex.Message;
+                }
+            }
+
             ResumeProcessThreads(pid);
+            return proxyNote;
         }
         finally
         {
             CloseHandle(handle);
         }
+    }
+
+    static void AppendProxyServer(IntPtr handle, long parameters, string hostPort)
+    {
+        var length = ReadUInt16(handle, parameters + 0x70);
+        var maxLength = ReadUInt16(handle, parameters + 0x72);
+        var buffer = ReadInt64(handle, parameters + 0x78);
+        if (buffer == 0 || length < 2 || maxLength < length)
+        {
+            throw new InvalidOperationException("命令行不可用。");
+        }
+
+        var current = new byte[length];
+        if (!ReadProcessMemory(handle, buffer, current, current.Length, out var read) || read != current.Length)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "读取命令行失败。");
+        }
+
+        var command = Encoding.Unicode.GetString(current);
+        if (command.Contains("--proxy-server=", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var updated = command + " --proxy-server=" + AppProxy.ToHttpUrl(hostPort) + " --proxy-bypass-list=<-loopback>";
+        var bytes = Encoding.Unicode.GetBytes(updated + "\0");
+        if (bytes.Length > ushort.MaxValue)
+        {
+            throw new InvalidOperationException("命令行过长。");
+        }
+
+        var target = buffer;
+        if (bytes.Length > maxLength)
+        {
+            target = VirtualAllocEx(handle, IntPtr.Zero, (nuint)bytes.Length, 0x3000, 0x04);
+            if (target == 0)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "分配命令行失败。");
+            }
+
+            WriteInt64(handle, parameters + 0x78, target);
+            WriteUInt16(handle, parameters + 0x72, (ushort)bytes.Length);
+        }
+
+        if (!WriteProcessMemory(handle, target, bytes, bytes.Length, out var written) || written != bytes.Length)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "写入代理参数失败。");
+        }
+
+        WriteUInt16(handle, parameters + 0x70, (ushort)(bytes.Length - 2));
     }
 
     static bool IsSafeTimezone(string timezone) =>
@@ -258,6 +352,26 @@ static class PackagedLaunch
 
         builder.Append('\0');
         return Encoding.Unicode.GetBytes(builder.ToString());
+    }
+
+    static ushort ReadUInt16(IntPtr handle, long address)
+    {
+        var buffer = new byte[2];
+        if (!ReadProcessMemory(handle, address, buffer, 2, out var read) || read != 2)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "读取进程内存失败。");
+        }
+
+        return BitConverter.ToUInt16(buffer, 0);
+    }
+
+    static void WriteUInt16(IntPtr handle, long address, ushort value)
+    {
+        var buffer = BitConverter.GetBytes(value);
+        if (!WriteProcessMemory(handle, address, buffer, 2, out var written) || written != 2)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "写入进程内存失败。");
+        }
     }
 
     static long ReadInt64(IntPtr handle, long address)
