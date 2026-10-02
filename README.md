@@ -29,6 +29,7 @@
 |------|------|
 | 出口探测 | 读取当前公网 IP、城市、国家、IANA 时区 |
 | 应用代理 | 只注入 ChatGPT、Codex CLI、Claude Code 和 Firefox。不改系统代理，不写用户级 `HTTP_PROXY` |
+| 直连接管 | 勾选后，只把 Codex 进程里不认代理的连接（dots 连接这台电脑）转进同一个端口。其他软件不动 |
 | 时区注入 | 只给 ChatGPT 进程设置 `TZ` |
 | 系统时区 | 保持原样，例如继续用中国标准时间 |
 
@@ -64,11 +65,17 @@ TZ=America/Los_Angeles ./scripts/unix/launch-codex.sh --timezone America/Los_Ang
 
 https://github.com/StatXzy7/codex-env-adapter/releases/latest
 
-下载 `CodexEnvAdapter-1.2.0-win-x64.exe` 后双击即可。第一次打开后可点 **创建桌面快捷方式**。
+下载 `CodexEnvAdapter-1.3.0-win-x64.exe` 后双击即可。第一次打开后可点 **创建桌面快捷方式**。
 
-## v1.2.0（2026-09-30，今天仍然可用）
+## v1.3.0
 
-v1.1.0 只给 Codex 桌面端注入时区，流量仍靠系统代理或全局 `HTTP_PROXY`。这两处会把整台电脑都送进代理；不开 TUN 时，Firefox 的 HTTP/3 还会绕过代理直连。
+dots 要连上这台电脑时，Codex 会自己发出一条不看 `HTTP_PROXY`、也不看 `--proxy-server` 的连接。以前这条连接只有 Clash 的 TUN 能截到。
+
+v1.3.0 在勾选 **接管 Codex 直连** 后，只把 ChatGPT / Codex 进程树里的这类直连转进原来的代理端口（默认 `127.0.0.1:7890`）。其他软件保持原样，也不改系统代理。启动时会要一次管理员权限。Codex 退出后这段接管自动停掉。Clash 需要开的是 mixed 端口，不是 TUN。
+
+## v1.2.0（2026-09-30）
+
+v1.1.0 只给 Codex 桌面端注入时区，流量仍靠系统代理或全局 `HTTP_PROXY`。这两处会把整台电脑都送进代理；Firefox 的 HTTP/3 还会绕过端口代理直连。
 
 v1.2.0 把代理收进实际要用的程序，Clash 继续听本地端口（默认 `127.0.0.1:7890`）：
 
@@ -83,10 +90,11 @@ Chrome / Edge 仍认 Clash 打开的系统代理。换节点后先刷新探测�
 
 exe 放在 Release 附件里，不进 git 仓库。
 
-1. 先打开 Clash，让它监听启动器里的代理端口（默认 7890），并固定到同一个节点。不必开系统代理
+1. 先打开 Clash，让它监听启动器里的代理端口（默认 7890），并固定到同一个节点。用 mixed 端口。不必开系统代理，也不必开 TUN
 2. 点 **刷新探测**，确认出口城市和时区
-3. 点 **保存并启动 Codex**
-4. 不要从开始菜单再开一次 ChatGPT，也不要同时开网页版 / 手机 App
+3. 勾选 **接管 Codex 直连**（要用 dots 连接这台电脑时）
+4. 点 **保存并启动 Codex**，在弹出的管理员授权里选择允许
+5. 不要从开始菜单再开一次 ChatGPT，也不要同时开网页版 / 手机 App
 
 ## 界面示例
 
@@ -161,6 +169,7 @@ scripts/Launch-ChatGPT.ps1
 
 - 确认 **现在** 的出口是哪
 - 把 ChatGPT 桌面端的 `TZ` 对齐到这个出口
+- 把 Codex 不认代理的直连转进你已经在听的那个端口（dots 连接这台电脑）
 
 示例环境（与截图一致，不含真实 IP）：
 

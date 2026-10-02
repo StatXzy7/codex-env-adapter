@@ -12,6 +12,8 @@ if ([string]::IsNullOrWhiteSpace($OutputDir)) {
 $project = Join-Path $root "src\CodexEnvAdapter\CodexEnvAdapter.csproj"
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
+powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "scripts\Get-WinDivert.ps1")
+
 dotnet publish $project `
     -c Release `
     -r win-x64 `

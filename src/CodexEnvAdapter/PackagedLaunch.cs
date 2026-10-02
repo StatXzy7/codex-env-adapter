@@ -260,12 +260,21 @@ static class PackagedLaunch
         }
 
         var command = Encoding.Unicode.GetString(current);
-        if (command.Contains("--proxy-server=", StringComparison.OrdinalIgnoreCase))
+        var updated = command;
+        if (!updated.Contains("--proxy-server=", StringComparison.OrdinalIgnoreCase))
+        {
+            updated += " --proxy-server=" + AppProxy.ToHttpUrl(hostPort) + " --proxy-bypass-list=<-loopback>";
+        }
+
+        if (!updated.Contains("--disable-quic", StringComparison.OrdinalIgnoreCase))
+        {
+            updated += " --disable-quic";
+        }
+
+        if (updated == command)
         {
             return;
         }
-
-        var updated = command + " --proxy-server=" + AppProxy.ToHttpUrl(hostPort) + " --proxy-bypass-list=<-loopback>";
         var bytes = Encoding.Unicode.GetBytes(updated + "\0");
         if (bytes.Length > ushort.MaxValue)
         {

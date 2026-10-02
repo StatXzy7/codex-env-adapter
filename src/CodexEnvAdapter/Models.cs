@@ -82,6 +82,9 @@ sealed class AppSettings
 
     [JsonPropertyName("cliProxyEnabled")]
     public bool CliProxyEnabled { get; set; } = true;
+
+    [JsonPropertyName("directProxyEnabled")]
+    public bool DirectProxyEnabled { get; set; } = true;
 }
 
 sealed class IpLookupDto

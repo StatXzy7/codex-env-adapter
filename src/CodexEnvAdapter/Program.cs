@@ -11,6 +11,16 @@ static class Program
             return;
         }
 
+        if (DirectProxyHost.IsRequest(args))
+        {
+            Environment.Exit(DirectProxyHost.Run(args));
+        }
+
+        if (DirectProxySelfTest.IsRequest(args))
+        {
+            Environment.Exit(DirectProxySelfTest.Run(args));
+        }
+
         if (args.Length >= 1 && args[0].Equals("--sync-proxy", StringComparison.OrdinalIgnoreCase))
         {
             var settings = SettingsStore.Load();
