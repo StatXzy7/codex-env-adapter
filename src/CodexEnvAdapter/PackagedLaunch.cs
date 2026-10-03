@@ -94,7 +94,11 @@ static class PackagedLaunch
         try
         {
             var aumid = install.PackageFamilyName + "!App";
-            var activateHr = CreateActivationManager().ActivateApplication(aumid, "", 0, out var pid);
+            // The package creates the command line. Patching it afterwards overflows the
+            // original buffer (it has no spare room) and ChatGPT faults in ntdll while
+            // converting that string. Activation arguments are included when the buffer is built.
+            var arguments = ProxyArguments(proxyHostPort);
+            var activateHr = CreateActivationManager().ActivateApplication(aumid, arguments, 0, out var pid);
             if (activateHr < 0 || pid == 0)
             {
                 throw new Win32Exception(activateHr, "激活 Codex 失败。");
@@ -219,23 +223,13 @@ static class PackagedLaunch
             }
 
             WriteInt64(handle, parameters + 0x3F0, block.Length);
-            var proxyNote = manageProxy
-                ? (proxyHostPort is null ? "proxy=off" : "proxy=" + proxyHostPort)
-                : "proxy=inherit";
-            if (proxyHostPort is not null)
+            ResumeProcessThreads(pid);
+            if (!manageProxy)
             {
-                try
-                {
-                    AppendProxyServer(handle, parameters, proxyHostPort);
-                }
-                catch (Exception ex)
-                {
-                    proxyNote = "proxy-cmdline-failed " + ex.Message;
-                }
+                return "proxy=inherit";
             }
 
-            ResumeProcessThreads(pid);
-            return proxyNote;
+            return proxyHostPort is null ? "proxy=off" : "proxy=" + proxyHostPort;
         }
         finally
         {
@@ -243,63 +237,14 @@ static class PackagedLaunch
         }
     }
 
-    static void AppendProxyServer(IntPtr handle, long parameters, string hostPort)
+    static string ProxyArguments(string? proxyHostPort)
     {
-        var length = ReadUInt16(handle, parameters + 0x70);
-        var maxLength = ReadUInt16(handle, parameters + 0x72);
-        var buffer = ReadInt64(handle, parameters + 0x78);
-        if (buffer == 0 || length < 2 || maxLength < length)
+        if (string.IsNullOrWhiteSpace(proxyHostPort))
         {
-            throw new InvalidOperationException("命令行不可用。");
+            return "";
         }
 
-        var current = new byte[length];
-        if (!ReadProcessMemory(handle, buffer, current, current.Length, out var read) || read != current.Length)
-        {
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "读取命令行失败。");
-        }
-
-        var command = Encoding.Unicode.GetString(current);
-        var updated = command;
-        if (!updated.Contains("--proxy-server=", StringComparison.OrdinalIgnoreCase))
-        {
-            updated += " --proxy-server=" + AppProxy.ToHttpUrl(hostPort) + " --proxy-bypass-list=<-loopback>";
-        }
-
-        if (!updated.Contains("--disable-quic", StringComparison.OrdinalIgnoreCase))
-        {
-            updated += " --disable-quic";
-        }
-
-        if (updated == command)
-        {
-            return;
-        }
-        var bytes = Encoding.Unicode.GetBytes(updated + "\0");
-        if (bytes.Length > ushort.MaxValue)
-        {
-            throw new InvalidOperationException("命令行过长。");
-        }
-
-        var target = buffer;
-        if (bytes.Length > maxLength)
-        {
-            target = VirtualAllocEx(handle, IntPtr.Zero, (nuint)bytes.Length, 0x3000, 0x04);
-            if (target == 0)
-            {
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "分配命令行失败。");
-            }
-
-            WriteInt64(handle, parameters + 0x78, target);
-            WriteUInt16(handle, parameters + 0x72, (ushort)bytes.Length);
-        }
-
-        if (!WriteProcessMemory(handle, target, bytes, bytes.Length, out var written) || written != bytes.Length)
-        {
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "写入代理参数失败。");
-        }
-
-        WriteUInt16(handle, parameters + 0x70, (ushort)(bytes.Length - 2));
+        return "--proxy-server=" + AppProxy.ToHttpUrl(proxyHostPort) + " --proxy-bypass-list=<-loopback> --disable-quic";
     }
 
     static bool IsSafeTimezone(string timezone) =>
@@ -361,26 +306,6 @@ static class PackagedLaunch
 
         builder.Append('\0');
         return Encoding.Unicode.GetBytes(builder.ToString());
-    }
-
-    static ushort ReadUInt16(IntPtr handle, long address)
-    {
-        var buffer = new byte[2];
-        if (!ReadProcessMemory(handle, address, buffer, 2, out var read) || read != 2)
-        {
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "读取进程内存失败。");
-        }
-
-        return BitConverter.ToUInt16(buffer, 0);
-    }
-
-    static void WriteUInt16(IntPtr handle, long address, ushort value)
-    {
-        var buffer = BitConverter.GetBytes(value);
-        if (!WriteProcessMemory(handle, address, buffer, 2, out var written) || written != 2)
-        {
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "写入进程内存失败。");
-        }
     }
 
     static long ReadInt64(IntPtr handle, long address)

@@ -11,7 +11,7 @@
     <Product>Codex环境适配启动器</Product>
     <AssemblyTitle>Codex环境适配启动器</AssemblyTitle>
     <Description>按当前出口节点给 ChatGPT / Codex 注入时区和代理，不修改 Windows 系统时区，也不写系统代理。</Description>
-    <Version>1.3.0</Version>
+    <Version>1.3.1</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>

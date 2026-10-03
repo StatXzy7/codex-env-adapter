@@ -65,7 +65,11 @@ TZ=America/Los_Angeles ./scripts/unix/launch-codex.sh --timezone America/Los_Ang
 
 https://github.com/StatXzy7/codex-env-adapter/releases/latest
 
-下载 `CodexEnvAdapter-1.3.0-win-x64.exe` 后双击即可。第一次打开后可点 **创建桌面快捷方式**。
+下载 `CodexEnvAdapter-1.3.1-win-x64.exe` 后双击即可。第一次打开后可点 **创建桌面快捷方式**。v1.2.0 和 v1.3.0 在当前 Codex 上会启动即退出，不要再用。
+
+## v1.3.1
+
+v1.2.0 和 v1.3.0 在进程创建之后改写命令行。Codex 26.930 的命令行缓冲区没有空余，改完会在窗口出现前退出。v1.3.1 改为在系统创建进程时传入代理参数，启动方式与仍可用的 v1.1.0 相同，并保留 v1.3.0 的直连接管。
 
 ## v1.3.0
 

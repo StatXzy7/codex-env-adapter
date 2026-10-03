@@ -445,11 +445,6 @@ sealed class MainForm : Form
             }
 
             Log($"已启动 Codex（PID {proc.Id}，TZ={timezone}，代理 {proxyText}）。系统时区和系统代理都未改动。");
-            var injectLog = Path.Combine(SettingsStore.DirectoryPath, "inject.log");
-            if (File.Exists(injectLog) && File.ReadAllText(injectLog).Contains("proxy-cmdline-failed", StringComparison.Ordinal))
-            {
-                Log("警告：ChatGPT 的代理启动参数没有写进去。环境变量已写入，若桌面端仍不走代理，请看 inject.log。");
-            }
         }
         catch (OperationCanceledException)
         {
